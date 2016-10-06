@@ -2,6 +2,7 @@ package org.reactivecouchbase.sql;
 
 import org.reactivecouchbase.common.Invariant;
 import org.reactivecouchbase.common.Throwables;
+import org.reactivecouchbase.functional.Tuple;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -9,25 +10,25 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-public class SQLBatch {
-    private final Map<String, Pair> params;
+public class Batch {
+    private final Map<String, Tuple<String, Object>> params;
     private int batchSize;
-    private final AtomicReference<PreparedStatement> statement = new AtomicReference<PreparedStatement>();
+    private final AtomicReference<PreparedStatement> statement = new AtomicReference<>();
     private final Query preparedQuery;
     private final AtomicInteger counter = new AtomicInteger(0);
-    private final List<SQLBatch> triggerBefore = new ArrayList<SQLBatch>();
-    private final List<SQLBatch> triggerAfter = new ArrayList<SQLBatch>();
+    private final List<Batch> triggerBefore = new ArrayList<>();
+    private final List<Batch> triggerAfter = new ArrayList<>();
 
     public Integer enqueued() {
         return counter.get();
     }
 
-    SQLBatch(Connection connection, Query preparedQuery, List<Pair> params, int batchSize) {
+    Batch(Connection connection, Query preparedQuery, List<Tuple<String, Object>> params, int batchSize) {
         this.preparedQuery = preparedQuery;
         this.params = new HashMap<>();
         this.batchSize = batchSize;
-        for (Pair p : params) {
-            this.params.put(p.key, p);
+        for (Tuple<String, Object> p : params) {
+            this.params.put(p._1, p);
         }
         if (statement.get() == null) {
             try {
@@ -42,9 +43,9 @@ public class SQLBatch {
         this.batchSize = -1;
     }
 
-    public SQLBatch triggerBeforeSelf(SQLBatch... batches) {
+    public Batch triggerBeforeSelf(Batch... batches) {
         Invariant.checkNotNull(batches);
-        for (SQLBatch batch : batches) {
+        for (Batch batch : batches) {
             if (batch != this) {
                 batch.cancelAutoBatch();
                 triggerBefore.add(batch);
@@ -53,9 +54,9 @@ public class SQLBatch {
         return this;
     }
 
-    public SQLBatch triggerAfterSelf(SQLBatch... batches) {
+    public Batch triggerAfterSelf(Batch... batches) {
         Invariant.checkNotNull(batches);
-        for (SQLBatch batch : batches) {
+        for (Batch batch : batches) {
             if (batch != this) {
                 batch.cancelAutoBatch();
                 triggerAfter.add(batch);
@@ -64,31 +65,31 @@ public class SQLBatch {
         return this;
     }
 
-    public final SQLBatch on(Pair... pairs) {
+    public final Batch on(Tuple<String, Object>... pairs) {
         params.clear();
         add(pairs);
         return this;
     }
 
-    public final SQLBatch on(String name, Object value) {
-        this.params.put(name.trim(), new Pair(name.trim(), value));
+    public final Batch on(String name, Object value) {
+        this.params.put(name.trim(), Tuple.of(name.trim(), value));
         return this;
     }
 
-    public final SQLBatch on(List<Pair> pairs) {
+    public final Batch on(List<Tuple<String, Object>> pairs) {
         params.clear();
         add(pairs);
         return this;
     }
 
-    public final SQLBatch add(Pair... pairs) {
+    public final Batch add(Tuple<String, Object>... pairs) {
         add(Arrays.asList(pairs));
         return this;
     }
 
-    public final SQLBatch add(List<Pair> pairs) {
-        for (Pair p : pairs) {
-            this.params.put(p.key, p);
+    public final Batch add(List<Tuple<String, Object>> pairs) {
+        for (Tuple<String, Object> p : pairs) {
+            this.params.put(p._1, p);
         }
         return this;
     }
@@ -121,7 +122,7 @@ public class SQLBatch {
     }
 
     public final List<Integer> executeBatch() {
-        for (SQLBatch batch : triggerBefore) {
+        for (Batch batch : triggerBefore) {
             batch.executeBatch();
         }
         try {
@@ -139,7 +140,7 @@ public class SQLBatch {
         } catch (Exception e) {
             throw Throwables.propagate(e);
         } finally {
-            for (SQLBatch batch : triggerAfter) {
+            for (Batch batch : triggerAfter) {
                 batch.executeBatch();
             }
         }

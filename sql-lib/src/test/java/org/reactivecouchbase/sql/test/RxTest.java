@@ -4,7 +4,6 @@ import org.h2.Driver;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.reactivecouchbase.concurrent.Ref;
 import org.reactivecouchbase.sql.connection.Database;
 
 import java.util.ArrayList;
@@ -15,10 +14,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static org.reactivecouchbase.sql.API.pair;
 import static org.reactivecouchbase.sql.API.sql;
-import static org.reactivecouchbase.sql.connection.API.database;
-import static org.reactivecouchbase.sql.connection.API.provider;
+import static org.reactivecouchbase.sql.connection.ConnectionAPI.database;
+import static org.reactivecouchbase.sql.connection.ConnectionAPI.provider;
 
 public class RxTest {
 
@@ -41,13 +39,23 @@ public class RxTest {
                     ";"
             ).executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 1), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                    .on("id", 1)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 42)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "john.doe@gmail.com")
+                    .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 2), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 16), pair("cell", "0606060606"), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                    .on("id", 2)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 16)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "john.doe@gmail.com")
+                    .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
                     .on("id", 3)
                     .on("name", "John")
@@ -79,6 +87,7 @@ public class RxTest {
                     .filter(person -> person.age > 18L)
                     .subscribe(
                         person -> {
+                            System.out.println("ping");
                             list.add(person);
                             latch.countDown();
                         },
@@ -100,4 +109,5 @@ public class RxTest {
             }
         });
     }
+
 }

@@ -3,22 +3,23 @@ package org.reactivecouchbase.sql.test;
 import org.h2.Driver;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.reactivecouchbase.functional.Option;
-import org.reactivecouchbase.functional.Unit;
 import org.reactivecouchbase.json.Json;
-import org.reactivecouchbase.sql.SQLBatch;
+import org.reactivecouchbase.sql.Batch;
 import org.reactivecouchbase.sql.connection.Database;
+import rx.Observable;
 
-import java.sql.Connection;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 
 import static org.reactivecouchbase.sql.API.*;
-import static org.reactivecouchbase.sql.connection.API.database;
-import static org.reactivecouchbase.sql.connection.API.provider;
+import static org.reactivecouchbase.sql.connection.ConnectionAPI.database;
+import static org.reactivecouchbase.sql.connection.ConnectionAPI.provider;
 
 public class SQLToolsTest {
 
@@ -40,22 +41,32 @@ public class SQLToolsTest {
                             ";"
             ).executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 1), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                    .on("id", 1)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 42)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "john.doe@gmail.com")
+                    .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 2), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 16), pair("cell", "0606060606"), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                    .on("id", 2)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 16)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "john.doe@gmail.com")
+                    .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                .on("id", 3)
-                .on("name", "John")
-                .on("surname", "Doe")
-                .on("age", 90)
-                .on("cell", "0606060606")
-                .on("address", "Here")
-                .on("email", "john.doe@gmail.com")
-                .executeUpdate();
+                    .on("id", 3)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 90)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "john.doe@gmail.com")
+                    .executeUpdate();
         });
         DB.withConnection(false, c -> {
             sql(c, "select * from persons").foreach(row -> {
@@ -117,11 +128,17 @@ public class SQLToolsTest {
     @Test
     public void testBatchInsertion() {
         DB.withConnection(false, c -> {
-            SQLBatch personBatch = batch(c, 10, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
+            Batch personBatch = batch(c, 10, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
             for (int i = 0; i < 25; i++) {
-                personBatch.on(pair("id", i + 500), pair("name", "John"), pair("surname", "Doe"),
-                    pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                    pair("email", "bob@bob.com")).batch();
+                personBatch
+                    .on("id", i + 500)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 42)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "bob@bob.com")
+                    .batch();
             }
             Integer howmany = sql(c, "SELECT COUNT(*) as howmany from Persons where email = 'bob@bob.com'").collectSingle(integerParser("howmany")).getOrElse(0);
             Assert.assertEquals(new Integer(20), howmany);
@@ -166,18 +183,24 @@ public class SQLToolsTest {
                 ";"
             ).executeUpdate();
 
-            SQLBatch table1Batch = batch(c, 10, "insert into table1 values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
-            SQLBatch table2Batch = batch(c, 10, "insert into table2 values ( {id}, {name}, {table1} );");
-            SQLBatch table3Batch = batch(c, 10, "insert into table3 values ( {id}, {name}, {table1} );");
+            Batch table1Batch = batch(c, 10, "insert into table1 values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
+            Batch table2Batch = batch(c, 10, "insert into table2 values ( {id}, {name}, {table1} );");
+            Batch table3Batch = batch(c, 10, "insert into table3 values ( {id}, {name}, {table1} );");
             table1Batch.triggerBeforeSelf(table2Batch, table3Batch);
             //table1Batch.triggerAfterSelf(table2Batch, table3Batch);
             for (int i = 0; i < 25; i++) {
                 int id = i + 500;
-                table2Batch.on(pair("id", id), pair("name", "stuff"), pair("table1", id)).batch();
-                table3Batch.on(pair("id", id), pair("name", "stuff"), pair("table1", id)).batch();
-                table1Batch.on(pair("id", id), pair("name", "John"), pair("surname", "Doe"),
-                        pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                        pair("email", "bob@bob.com")).batch();
+                table2Batch.on("id", id).on("name", "stuff").on("table1", id).batch();
+                table3Batch.on("id", id).on("name", "stuff").on("table1", id).batch();
+                table1Batch
+                    .on("id", id)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 42)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "bob@bob.com")
+                    .batch();
             }
             Integer howmany1 = sql(c, "SELECT COUNT(*) as howmany from table1").collectSingle(integerParser("howmany")).getOrElse(0);
             Integer howmany2 = sql(c, "SELECT COUNT(*) as howmany from table2").collectSingle(integerParser("howmany")).getOrElse(0);
@@ -230,19 +253,25 @@ public class SQLToolsTest {
                             ";"
             ).executeUpdate();
 
-            SQLBatch table1Batch = batch(c, 10, "insert into table1 values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
-            SQLBatch table2Batch = batch(c, "insert into table2 values ( {id}, {name}, {table1} );");
-            SQLBatch table3Batch = batch(c, "insert into table3 values ( {id}, {name}, {table1} );");
+            Batch table1Batch = batch(c, 10, "insert into table1 values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
+            Batch table2Batch = batch(c, "insert into table2 values ( {id}, {name}, {table1} );");
+            Batch table3Batch = batch(c, "insert into table3 values ( {id}, {name}, {table1} );");
             table2Batch.triggerBeforeSelf(table3Batch);
             table1Batch.triggerBeforeSelf(table2Batch);
             //table1Batch.triggerAfterSelf(table2Batch, table3Batch);
             for (int i = 0; i < 25; i++) {
                 int id = i + 500;
-                table2Batch.on(pair("id", id), pair("name", "stuff"), pair("table1", id)).batch();
-                table3Batch.on(pair("id", id), pair("name", "stuff"), pair("table1", id)).batch();
-                table1Batch.on(pair("id", id), pair("name", "John"), pair("surname", "Doe"),
-                        pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                        pair("email", "bob@bob.com")).batch();
+                table2Batch.on("id", id).on("name", "stuff").on("table1", id).batch();
+                table3Batch.on("id", id).on("name", "stuff").on("table1", id).batch();
+                table1Batch
+                    .on("id", id)
+                    .on("name", "John")
+                    .on("surname", "Doe")
+                    .on("age", 42)
+                    .on("cell", "0606060606")
+                    .on("address", "Here")
+                    .on("email", "bob@bob.com")
+                    .batch();
             }
             Integer howmany1 = sql(c, "SELECT COUNT(*) as howmany from table1").collectSingle(integerParser("howmany")).getOrElse(0);
             Integer howmany2 = sql(c, "SELECT COUNT(*) as howmany from table2").collectSingle(integerParser("howmany")).getOrElse(0);
@@ -263,28 +292,38 @@ public class SQLToolsTest {
     @Test
     public void testBatchInsertionWithNothing() {
         DB.withConnection(false, c -> {
-            SQLBatch personBatch = batch(c, 10, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
+            Batch personBatch = batch(c, 10, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );");
             List<Integer> result = personBatch.executeBatch();
             Assert.assertEquals(0, result.size());
         });
     }
 
+    public <T> ArrayList<T> append(ArrayList<T> list, T elem) {
+        list.add(elem);
+        return list;
+    }
+
     @Test
-    public void testStreams1() {
-        DB.withConnection(false, c -> {
-            List<String> values = sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons")
-                .asStream()
+    public void testStreams1() throws Exception {
+        final ExecutorService ec = Executors.newFixedThreadPool(8);
+        CountDownLatch latch = new CountDownLatch(1);
+        DB.withRxConnection(false, c -> {
+            return sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons")
+                .asObservable(ec)
                 .map(input -> "")
                 .map(input -> input + "a")
                 .map(input -> input + "b")
                 .map(input -> input + "c")
                 .map(String::toUpperCase)
-                .run();
+                .reduce(new ArrayList<String>(), (a, b) -> this.append(a, b));
+        }).subscribe(values -> {
             for (String str : values) {
                 Assert.assertEquals("ABC", str);
             }
             Assert.assertEquals(3, values.size());
+            latch.countDown();
         });
+        latch.await();
     }
 
     @Test
@@ -293,9 +332,14 @@ public class SQLToolsTest {
         final AtomicInteger counter = new AtomicInteger(0);
         DB.withConnection(true, c -> {
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 4), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 42), pair("cell", "0606060606"), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                .on("id", 4)
+                .on("name", "John")
+                .on("surname", "Doe")
+                .on("age", 42)
+                .on("cell", "0606060606")
+                .on("address", "Here")
+                .on("email", "john.doe@gmail.com")
+                .executeUpdate();
         });
         DB.withConnection(false, c -> {
             List<String> values = sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons")
@@ -337,7 +381,7 @@ public class SQLToolsTest {
     public void testPrepared() {
         DB.withConnection(false, c -> {
             for (int i = 0; i < 5000; i ++) {
-                 Json.prettyPrint(sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons where id = {id}").on(pair("id", i)).asJsArray());
+                 Json.prettyPrint(sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons where id = {id}").on("id", i).asJsArray());
             }
         });
     }
@@ -346,17 +390,32 @@ public class SQLToolsTest {
     public void testInsertNull() {
         DB.withConnection(true, c -> {
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 520), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 42), pair("cell", null), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                .on("id", 520)
+                .on("name", "John")
+                .on("surname", "Doe")
+                .on("age", 42)
+                .on("cell", null)
+                .on("address", "Here")
+                .on("email", "john.doe@gmail.com")
+                .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 521), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 16), pair("cell", null), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                .on("id", 521)
+                .on("name", "John")
+                .on("surname", "Doe")
+                .on("age", 16)
+                .on("cell", null)
+                .on("address", "Here")
+                .on("email", "john.doe@gmail.com")
+                .executeUpdate();
             sql(c, "insert into persons values ( {id}, {name}, {surname}, {age}, {cell}, {address}, {email} );")
-                    .on(pair("id", 522), pair("name", "John"), pair("surname", "Doe"),
-                            pair("age", 90), pair("cell", null), pair("address", "Here"),
-                            pair("email", "john.doe@gmail.com")).executeUpdate();
+                .on("id", 522)
+                .on("name", "John")
+                .on("surname", "Doe")
+                .on("age", 90)
+                .on("cell", null)
+                .on("address", "Here")
+                .on("email", "john.doe@gmail.com")
+                .executeUpdate();
         });
     }
 
@@ -384,53 +443,45 @@ public class SQLToolsTest {
         }
 
         public static int count() {
-            return DB.withConnection(false, new Function<Connection, Integer>() {
-                @Override
-                public Integer apply(Connection c) {
-                    return sql(c, "select count(*) as p from persons").collectSingle(integerParser("p")).getOrElse(0);
-                }
+            return DB.withConnection(false, c -> {
+                return sql(c, "select count(*) as p from persons").collectSingle(integerParser("p")).getOrElse(0);
             });
         }
 
         public static List<Person> findAll() {
-            return DB.withConnection(false, new Function<Connection, List<Person>>() {
-                @Override
-                public List<Person> apply(Connection c) {
-                    return sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons").collect(row -> {
-                        return Option.some(new Person(
-                                row.lng("id"),
-                                row.str("name"),
-                                row.str("surname"),
-                                row.lng("age"),
-                                row.str("cell"),
-                                row.str("address"),
-                                row.str("email")
-                        ));
-                    });
-                }
+            return DB.withConnection(false, c -> {
+                return sql(c, "SELECT id, name, surname, age, cell, address, email FROM Persons").collect(row -> {
+                    return Option.some(new Person(
+                            row.lng("id"),
+                            row.str("name"),
+                            row.str("surname"),
+                            row.lng("age"),
+                            row.str("cell"),
+                            row.str("address"),
+                            row.str("email")
+                    ));
+                });
             });
         }
 
         public static List<Person> findAllBetween(final int low, final int high) {
-            return DB.withConnection(false, new Function<Connection, List<Person>>() {
-                @Override
-                public List<Person> apply(Connection conn) {
-                    return sql(conn,
-                            "SELECT id, name, surname, age, cell, address, email " +
-                                    "FROM Persons WHERE age > { low} AND age < {high}")
-                            .on( pair("low", low), pair("high", high) )
-                            .collect(row -> {
-                                return Option.some(new Person(
-                                        row.lng("id"),
-                                        row.str("name"),
-                                        row.str("surname"),
-                                        row.lng("age"),
-                                        row.str("cell"),
-                                        row.str("address"),
-                                        row.str("email")
-                                ));
-                            });
-                }
+            return DB.withConnection(false, conn -> {
+                return sql(conn,
+                        "SELECT id, name, surname, age, cell, address, email " +
+                                "FROM Persons WHERE age > { low} AND age < {high}")
+                        .on("low", low)
+                        .on("high", high)
+                        .collect(row -> {
+                            return Option.some(new Person(
+                                    row.lng("id"),
+                                    row.str("name"),
+                                    row.str("surname"),
+                                    row.lng("age"),
+                                    row.str("cell"),
+                                    row.str("address"),
+                                    row.str("email")
+                            ));
+                        });
             });
         }
 

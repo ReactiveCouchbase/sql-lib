@@ -4,11 +4,16 @@ import org.reactivecouchbase.common.Holder;
 import org.reactivecouchbase.common.Throwables;
 import org.reactivecouchbase.concurrent.Future;
 import org.reactivecouchbase.functional.Option;
+import org.reactivecouchbase.functional.Tuple;
 import org.reactivecouchbase.json.JsArray;
 import org.reactivecouchbase.json.JsObject;
 import org.reactivecouchbase.json.JsValue;
 import org.reactivecouchbase.json.Json;
+import org.reactivecouchbase.sql.representation.AsyncSQL;
+import org.reactivecouchbase.sql.representation.AsyncStream;
+import org.reactivecouchbase.sql.representation.Stream;
 import rx.Observable;
+import rx.Single;
 import rx.Subscriber;
 
 import java.sql.Connection;
@@ -26,7 +31,7 @@ public class SQL {
 
     private final Query preparedQuery;
     private final Connection connection;
-    private final Map<String, Pair> params;
+    private final Map<String, Tuple<String, Object>> params;
     private boolean safeMode = API.defaultSafeModeValue;
     private Option<Integer> page = API.defaultPageOfValue;
 
@@ -35,12 +40,12 @@ public class SQL {
         return this;
     }
 
-    SQL(Connection connection, Query preparedQuery, List<Pair> params) {
+    SQL(Connection connection, Query preparedQuery, List<Tuple<String, Object>> params) {
         this.preparedQuery = preparedQuery;
         this.connection = connection;
         this.params = new HashMap<>();
-        for (Pair p : params) {
-            this.params.put(p.key.trim(), p);
+        for (Tuple<String, Object> p : params) {
+            this.params.put(p._1.trim(), p);
         }
     }
 
@@ -54,23 +59,23 @@ public class SQL {
         return this;
     }
 
-    public final SQL on(Pair... pairs) {
+    public final SQL on(Tuple<String, Object>... pairs) {
         params.clear();
-        for (Pair p : Arrays.asList(pairs)) {
-            this.params.put(p.key.trim(), p);
+        for (Tuple<String, Object> p : Arrays.asList(pairs)) {
+            this.params.put(p._1.trim(), p);
         }
         return this;
     }
 
     public final SQL on(String name, Object value) {
-        this.params.put(name.trim(), new Pair(name.trim(), value));
+        this.params.put(name.trim(), Tuple.of(name.trim(), value));
         return this;
     }
 
-    public final SQL on(List<Pair> pairs) {
+    public final SQL on(List<Tuple<String, Object>> pairs) {
         params.clear();
-        for (Pair p : pairs) {
-            this.params.put(p.key.trim(), p);
+        for (Tuple<String, Object> p : pairs) {
+            this.params.put(p._1.trim(), p);
         }
         return this;
     }
@@ -188,21 +193,46 @@ public class SQL {
         return new AsyncSQL(this, ec);
     }
 
+    public Single<Row> asSingle(ExecutorService ec) {
+        SQL sql = this;
+        return Single.create(subscriber -> {
+            Future.async(() -> {
+                try {
+                    Option<Row> row = sql.single();
+                    if (row.isDefined()) {
+                        subscriber.onSuccess(row.get());
+                    } else {
+                        subscriber.onError(new RuntimeException("No value returned"));
+                    }
+                } catch (Throwable e) {
+                    subscriber.onError(e);
+                }
+            }, ec);
+        });
+    }
+
     public Observable<Row> asObservable(int pageOf, ExecutorService ec) {
         return this.withPageOf(pageOf).asObservable(ec);
     }
 
     public Observable<Row> asObservable(ExecutorService ec) {
+        System.out.println("asObservable");
         SQL sql = this;
         return Observable.create(new Observable.OnSubscribe<Row>() {
             @Override
             public void call(Subscriber<? super Row> subscriber) {
+                System.out.println("call");
                 Future.async(() -> {
+                    System.out.println("start");
                     subscriber.onStart();
                     try {
                         sql.foreach(subscriber::onNext);
+                        System.out.println("finished");
                         subscriber.onCompleted();
+                        System.out.println("done");
                     } catch (Throwable e) {
+                        System.out.println("error");
+                        e.printStackTrace();
                         subscriber.onError(e);
                     }
                 }, ec);

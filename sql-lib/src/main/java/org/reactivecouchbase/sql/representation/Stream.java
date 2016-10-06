@@ -1,8 +1,9 @@
-package org.reactivecouchbase.sql;
+package org.reactivecouchbase.sql.representation;
 
 import org.reactivecouchbase.common.Holder;
 import org.reactivecouchbase.functional.Option;
-import org.reactivecouchbase.functional.Unit;
+import org.reactivecouchbase.sql.Row;
+import org.reactivecouchbase.sql.SQL;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -13,13 +14,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
-
 public class Stream<T> {
 
     private final SQL sql;
     private final Function<Row, Option<T>> pipeline;
 
-    Stream(SQL sql, Function<Row, Option<T>> pipeline) {
+    public Stream(SQL sql, Function<Row, Option<T>> pipeline) {
         this.sql = sql;
         this.pipeline = pipeline;
     }
@@ -105,7 +105,7 @@ public class Stream<T> {
     }
 
     public <K, V> Map<K, List<V>> groupBy(final Function<T, K> grouper, final Function<T, V> extractor) {
-        final Map<K, List<V>> map = new HashMap<K, List<V>>();
+        final Map<K, List<V>> map = new HashMap<>();
         sql.foreach(row -> {
             Option<T> opt = pipeline.apply(row);
             if (opt != null && opt.isDefined()) {

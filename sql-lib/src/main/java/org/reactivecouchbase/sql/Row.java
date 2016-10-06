@@ -4,6 +4,7 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormatter;
 import org.reactivecouchbase.common.Throwables;
 import org.reactivecouchbase.functional.Option;
+import org.reactivecouchbase.functional.Tuple;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -396,12 +397,12 @@ public class Row {
         return Option.some(asMap());
     }
 
-    public final Option<List<Pair>> asOptList() {
+    public final Option<List<Tuple<String, Object>>> asOptList() {
         return Option.some(asList());
     }
 
     public final Map<String, Object> asMap() {
-        Map<String, Object> row = new HashMap<String, Object>();
+        Map<String, Object> row = new HashMap<>();
         try {
             int columns = set.getMetaData().getColumnCount();
             for (int i = 1; i < columns + 1; i++) {
@@ -414,13 +415,13 @@ public class Row {
         return row;
     }
 
-    public final List<Pair> asList() {
-        List<Pair> row = new ArrayList<Pair>();
+    public final List<Tuple<String, Object>> asList() {
+        List<Tuple<String, Object>> row = new ArrayList<>();
         try {
             int columns = set.getMetaData().getColumnCount();
             for (int i = 1; i < columns + 1; i++) {
                 String name = set.getMetaData().getColumnName(i);
-                row.add(new Pair(name, set.getObject(i)));
+                row.add(Tuple.of(name, set.getObject(i)));
             }
         } catch (Exception e) {
             throw Throwables.propagate(e);

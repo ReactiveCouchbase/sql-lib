@@ -10,7 +10,7 @@ import java.sql.SQLException;
 /**
  * Manage a connection to a database for a thread
  */
-class SimpleProvider implements ConnectionProvider {
+public class SimpleProvider implements ConnectionProvider {
 
     private final String url;
     private final String login;

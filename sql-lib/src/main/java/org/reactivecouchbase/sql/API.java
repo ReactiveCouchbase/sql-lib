@@ -4,6 +4,7 @@ import org.joda.time.DateTime;
 import org.reactivecouchbase.common.Invariant;
 import org.reactivecouchbase.common.Throwables;
 import org.reactivecouchbase.functional.Option;
+import org.reactivecouchbase.functional.Tuple;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -28,10 +29,6 @@ public class API {
         API.defaultPageOfValue = defaultPageOfValue;
     }
 
-    public static Pair pair(String key, Object value) {
-        return new Pair(key, value);
-    }
-
     public static SQL sql(Connection connection, String sql) {
         return new SQL(connection, Query.preparedQuery(sql), new ArrayList<>());
     }
@@ -40,23 +37,23 @@ public class API {
         return new SQL(connection, preparedQuery, new ArrayList<>());
     }
 
-    public static SQLBatch batch(Connection connection, String sql) {
-        return new SQLBatch(connection, Query.preparedQuery(sql), new ArrayList<>(), -1);
+    public static Batch batch(Connection connection, String sql) {
+        return new Batch(connection, Query.preparedQuery(sql), new ArrayList<>(), -1);
     }
 
-    public static SQLBatch batch(Connection connection, Query preparedQuery) {
-        return new SQLBatch(connection, preparedQuery, new ArrayList<>(), -1);
+    public static Batch batch(Connection connection, Query preparedQuery) {
+        return new Batch(connection, preparedQuery, new ArrayList<>(), -1);
     }
 
-    public static SQLBatch batch(Connection connection, int batchSize, String sql) {
-        return new SQLBatch(connection, Query.preparedQuery(sql), new ArrayList<>(), batchSize);
+    public static Batch batch(Connection connection, int batchSize, String sql) {
+        return new Batch(connection, Query.preparedQuery(sql), new ArrayList<>(), batchSize);
     }
 
-    public static SQLBatch batch(Connection connection, int batchSize, Query preparedQuery) {
-        return new SQLBatch(connection, preparedQuery, new ArrayList<>(), batchSize);
+    public static Batch batch(Connection connection, int batchSize, Query preparedQuery) {
+        return new Batch(connection, preparedQuery, new ArrayList<>(), batchSize);
     }
 
-    static PreparedStatement fillPreparedStatement(PreparedStatement pst, List<String> names, Map<String, Pair> params) {
+    static PreparedStatement fillPreparedStatement(PreparedStatement pst, List<String> names, Map<String, Tuple<String, Object>> params) {
         int i = 1;
         for (String name : names) {
             pst = fillOneParam(pst, i, name, params);
@@ -65,9 +62,9 @@ public class API {
         return pst;
     }
 
-    private static PreparedStatement fillOneParam(PreparedStatement pst, int index, String name, Map<String, Pair> params) {
+    private static PreparedStatement fillOneParam(PreparedStatement pst, int index, String name, Map<String, Tuple<String, Object>> params) {
         if (params.containsKey(name)) {
-            Object value = params.get(name).value;
+            Object value = params.get(name)._2;
             try {
                 if (value instanceof String) {
                     pst.setString(index, (String) value);

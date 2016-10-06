@@ -1,10 +1,12 @@
-package org.reactivecouchbase.sql;
+package org.reactivecouchbase.sql.representation;
 
 import org.reactivecouchbase.concurrent.Future;
 import org.reactivecouchbase.functional.Option;
 import org.reactivecouchbase.functional.Unit;
 import org.reactivecouchbase.json.JsArray;
 import org.reactivecouchbase.json.JsValue;
+import org.reactivecouchbase.sql.Row;
+import org.reactivecouchbase.sql.SQL;
 
 import java.util.List;
 import java.util.Map;
@@ -17,7 +19,7 @@ public class AsyncSQL {
     private final SQL sql;
     private final ExecutorService ec;
 
-    AsyncSQL(SQL sql, ExecutorService ec) {
+    public AsyncSQL(SQL sql, ExecutorService ec) {
         this.sql = sql;
         this.ec = ec;
     }

@@ -6,80 +6,49 @@ import org.reactivecouchbase.concurrent.Promise;
 import rx.Observable;
 
 import java.sql.Connection;
+import java.sql.Driver;
 import java.sql.SQLException;
-import java.util.function.Consumer;
 import java.util.function.Function;
 
-public class Database {
+public class ConnectionAPI {
 
-    private final ConnectionProvider provider;
-
-    Database(ConnectionProvider provider) {
-        this.provider = provider;
-        startup();
+    public static Database database(ConnectionProvider provider) {
+        return new Database(provider);
     }
 
-    private void startup() {
-        provider.start();
+    public static ConnectionProvider provider(Driver driver, String url, String login, String password) {
+        return new SimpleProvider(driver, url, login, password);
     }
 
-    public final void close() {
-        provider.stop();
-    }
-
-    public final void withConnection(Boolean transac, Consumer<Connection> action) {
-        provider.beforeRequest();
+    public static <T> T withConnection(Connection connection, Boolean transac, Function<Connection, T> block) {
         try {
-            Connection connection = provider.get();
-            try {
-                action.accept(connection);
-                if (transac) {
-                    connection.commit();
-                }
-            } catch (Exception e) {
-                try {
-                    if (transac) {
-                        connection.rollback();
-                    }
-                } catch (SQLException e1) {
-                    throw Throwables.propagate(e1);
-                }
-                throw Throwables.propagate(e);
+            T ret = block.apply(connection);
+            if (transac) {
+                connection.commit();
             }
-        } finally  {
-            provider.afterRequest();
+            return ret;
+        } catch (Exception e) {
+            try {
+                if (transac) {
+                    connection.rollback();
+                }
+            } catch (SQLException e1) {
+                throw Throwables.propagate(e1);
+            }
+            throw Throwables.propagate(e);
+        } finally {
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException ignore) {
+                    throw Throwables.propagate(ignore);
+                }
+            }
         }
     }
 
-    public final <T> T withConnection(Boolean transac, Function<Connection, T> action) {
-        provider.beforeRequest();
-        try {
-            Connection connection = provider.get();
-            try {
-                T ret = action.apply(connection);
-                if (transac) {
-                    connection.commit();
-                }
-                return ret;
-            } catch (Exception e) {
-                try {
-                    if (transac) {
-                        connection.rollback();
-                    }
-                } catch (SQLException e1) {
-                    throw Throwables.propagate(e1);
-                }
-                throw Throwables.propagate(e);
-            }
-        } finally  {
-            provider.afterRequest();
-        }
-    }
-
-    public final <T> Future<T> withAsyncConnection(Boolean transac, Function<Connection, Future<T>> block) {
+    public static <T> Future<T> withAsyncConnection(Connection connection, Boolean transac, Function<Connection, Future<T>> block) {
         Promise<T> p = new Promise<>();
-        provider.beforeRequest();
-        Connection connection = provider.get();
         try {
             block.apply(connection).onComplete(ttry -> {
                 for (Throwable t : ttry.asFailure()) {
@@ -101,7 +70,13 @@ public class Database {
                         }
                     }
                 }
-                provider.afterRequest();
+                if (connection != null) {
+                    try {
+                        connection.close();
+                    } catch (SQLException ignore) {
+                        p.tryFailure(ignore);
+                    }
+                }
             });
         } catch (Exception eee) {
             try {
@@ -111,16 +86,20 @@ public class Database {
             } catch (SQLException e1) {
                 p.tryFailure(e1);
             }
+            if (connection != null) {
+                try {
+                    connection.close();
+                } catch (SQLException ignore) {
+                    p.tryFailure(ignore);
+                }
+            }
             p.tryFailure(eee);
-            provider.afterRequest();
         }
         return p.future();
     }
 
-    public final <T> Observable<T> withRxConnection(Boolean transac, Function<Connection, Observable<T>> block) {
+    public static <T> Observable<T> withRxConnection(Connection connection, Boolean transac, Function<Connection, Observable<T>> block) {
         return Observable.create(os -> {
-            provider.beforeRequest();
-            Connection connection = provider.get();
             try {
                 Observable<T> ret = block.apply(connection);
                 ret.doOnError(e -> {
@@ -145,7 +124,13 @@ public class Database {
                 });
                 ret.doOnCompleted(() -> {
                     os.onCompleted();
-                    provider.afterRequest();
+                    if (connection != null) {
+                        try {
+                            connection.close();
+                        } catch (SQLException ignore) {
+                            os.onError(ignore);
+                        }
+                    }
                 });
             } catch (Exception eee) {
                 try {
@@ -156,7 +141,13 @@ public class Database {
                     os.onError(e1);
                 }
                 os.onError(eee);
-                provider.afterRequest();
+                if (connection != null) {
+                    try {
+                        connection.close();
+                    } catch (SQLException ignore) {
+                        os.onError(ignore);
+                    }
+                }
             }
         });
     }
