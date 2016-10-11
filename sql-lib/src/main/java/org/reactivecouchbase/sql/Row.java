@@ -17,7 +17,7 @@ public class Row {
     private final Boolean safeMode;
     private final int index;
 
-    Row(int index, ResultSet set, Boolean safeMode) {
+    public Row(int index, ResultSet set, Boolean safeMode) {
         this.index = index;
         this.set = set;
         this.safeMode = safeMode;
