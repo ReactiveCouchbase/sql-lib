@@ -29,6 +29,10 @@ public class API {
         API.defaultPageOfValue = defaultPageOfValue;
     }
 
+    public static Call call(Connection connection, String sql) {
+        return new Call(connection, Query.preparedQuery(sql), new ArrayList<>());
+    }
+
     public static SQL sql(Connection connection, String sql) {
         return new SQL(connection, Query.preparedQuery(sql), new ArrayList<>());
     }
@@ -53,7 +57,50 @@ public class API {
         return new Batch(connection, preparedQuery, new ArrayList<>(), batchSize);
     }
 
-    static PreparedStatement fillPreparedStatement(PreparedStatement pst, List<String> names, Map<String, Tuple<String, Object>> params) {
+    static <T extends PreparedStatement> T fillStatement(T pst, List<String> names, Map<String, Tuple<String, Object>> params) {
+        int i = 1;
+        for (String name : names) {
+            pst = fillParam(pst, i, name, params);
+            i++;
+        }
+        return pst;
+    }
+
+    private static <T extends PreparedStatement> T fillParam(T pst, int index, String name, Map<String, Tuple<String, Object>> params) {
+        if (params.containsKey(name)) {
+            Object value = params.get(name)._2;
+            try {
+                if (value instanceof String) {
+                    pst.setString(index, (String) value);
+                } else if (value instanceof Time) {
+                    pst.setTime(index, (Time) value);
+                } else if (value instanceof Timestamp) {
+                    pst.setTimestamp(index, (Timestamp) value);
+                } else if (value instanceof java.util.Date) {
+                    pst.setDate(index, new java.sql.Date(((java.util.Date) value).getTime()));
+                } else if (value instanceof DateTime) {
+                    pst.setDate(index, new java.sql.Date(((DateTime) value).toDate().getTime()));
+                } else {
+                    pst.setObject(index, value);
+                }
+            } catch (Exception e) {
+                throw Throwables.propagate(e);
+            }
+        }
+
+        return pst;
+    }
+
+    /*static PreparedStatement fillPreparedStatement(PreparedStatement pst, List<String> names, Map<String, Tuple<String, Object>> params) {
+        int i = 1;
+        for (String name : names) {
+            pst = fillOneParam(pst, i, name, params);
+            i++;
+        }
+        return pst;
+    }
+
+    static CallableStatement fillCallableStatement(CallableStatement pst, List<String> names, Map<String, Tuple<String, Object>> params) {
         int i = 1;
         for (String name : names) {
             pst = fillOneParam(pst, i, name, params);
@@ -86,6 +133,31 @@ public class API {
 
         return pst;
     }
+
+    private static CallableStatement fillOneParam(CallableStatement pst, int index, String name, Map<String, Tuple<String, Object>> params) {
+        if (params.containsKey(name)) {
+            Object value = params.get(name)._2;
+            try {
+                if (value instanceof String) {
+                    pst.setString(index, (String) value);
+                } else if (value instanceof Time) {
+                    pst.setTime(index, (Time) value);
+                } else if (value instanceof Timestamp) {
+                    pst.setTimestamp(index, (Timestamp) value);
+                } else if (value instanceof java.util.Date) {
+                    pst.setDate(index, new java.sql.Date(((java.util.Date) value).getTime()));
+                } else if (value instanceof DateTime) {
+                    pst.setDate(index, new java.sql.Date(((DateTime) value).toDate().getTime()));
+                } else {
+                    pst.setObject(index, value);
+                }
+            } catch (Exception e) {
+                throw Throwables.propagate(e);
+            }
+        }
+
+        return pst;
+    }*/
 
     public static Function<Row, Option<Long>> longParser(final String name) {
         return row -> Option.apply(row.lng(name));

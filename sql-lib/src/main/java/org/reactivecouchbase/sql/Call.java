@@ -15,7 +15,9 @@ import org.reactivecouchbase.sql.representation.Stream;
 import rx.Observable;
 import rx.Single;
 import rx.Subscriber;
+import rx.functions.Func1;
 
+import java.sql.CallableStatement;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -27,7 +29,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-public class SQL {
+public class Call {
 
     private final Query preparedQuery;
     private final Connection connection;
@@ -35,12 +37,12 @@ public class SQL {
     private boolean safeMode = API.defaultSafeModeValue;
     private Option<Integer> page = API.defaultPageOfValue;
 
-    public SQL unsafe(Boolean u) {
+    public Call unsafe(Boolean u) {
         this.safeMode = u;
         return this;
     }
 
-    SQL(Connection connection, Query preparedQuery, List<Tuple<String, Object>> params) {
+    Call(Connection connection, Query preparedQuery, List<Tuple<String, Object>> params) {
         this.preparedQuery = preparedQuery;
         this.connection = connection;
         this.params = new HashMap<>();
@@ -49,46 +51,26 @@ public class SQL {
         }
     }
 
-    public final SQL withPageOf(int of) {
+    public final Call withPageOf(int of) {
         page = Option.some(of);
         return this;
     }
 
-    public final SQL withNoPage() {
+    public final Call withNoPage() {
         page = Option.none();
         return this;
     }
 
-    public final SQL on(Tuple<String, Object>... pairs) {
-        params.clear();
-        for (Tuple<String, Object> p : Arrays.asList(pairs)) {
-            this.params.put(p._1.trim(), p);
-        }
-        return this;
-    }
-
-    public final SQL on(String name, Object value) {
+    public final Call on(String name, Object value) {
         this.params.put(name.trim(), Tuple.of(name.trim(), value));
         return this;
     }
 
-    public final SQL on(List<Tuple<String, Object>> pairs) {
-        params.clear();
-        for (Tuple<String, Object> p : pairs) {
-            this.params.put(p._1.trim(), p);
-        }
-        return this;
-    }
-
-    private static PreparedStatement getStatement(Connection connection, String sql) throws Exception {
-        return connection.prepareStatement(sql);
-    }
-
     private final <T> List<T> executeQueryWithLimit(Function<Row, Option<T>> parser, Long limit) {
         ResultSet resultSet = null;
-        PreparedStatement pst = null;
+        CallableStatement pst = null;
         try {
-            pst = getStatement(connection, preparedQuery.getPreparedSqlQuery());
+            pst = connection.prepareCall(preparedQuery.getPreparedSqlQuery());
             if (pst != null && page.isDefined()) {
                 pst.setFetchSize(page.get());
             }
@@ -128,7 +110,7 @@ public class SQL {
 
     public final boolean execute() {
         try {
-            PreparedStatement pst = getStatement(connection, preparedQuery.getPreparedSqlQuery());
+            CallableStatement pst = connection.prepareCall(preparedQuery.getPreparedSqlQuery());
             pst = API.fillStatement(pst, preparedQuery.getParamNames(), params);
             return pst.execute();
         } catch (Exception e) {
@@ -136,10 +118,9 @@ public class SQL {
         }
     }
 
-
     public final int executeUpdate() {
         try {
-            PreparedStatement pst = getStatement(connection, preparedQuery.getPreparedSqlQuery());
+            CallableStatement pst = connection.prepareCall(preparedQuery.getPreparedSqlQuery());
             pst = API.fillStatement(pst, preparedQuery.getParamNames(), params);
             return pst.executeUpdate();
         } catch (Exception e) {
@@ -173,28 +154,8 @@ public class SQL {
         }
     }
 
-    public Stream<Row> asStream(int pageOf) {
-        return this.withPageOf(pageOf).asStream();
-    }
-
-    public Stream<Row> asStream() {
-        return new Stream<>(this, Option::some);
-    }
-
-    public AsyncStream<Row> asAsyncStream(int pageOf) {
-        return this.withPageOf(pageOf).asStream().asAsyncStream();
-    }
-
-    public AsyncStream<Row> asAsyncStream() {
-        return new Stream<>(this, Option::some).asAsyncStream();
-    }
-
-    public AsyncSQL asAsync(ExecutorService ec) {
-        return new AsyncSQL(this, ec);
-    }
-
-    public Single<Row> asSingle(ExecutorService ec) {
-        SQL sql = this;
+    public Single<Row> asAsyncSingle(ExecutorService ec) {
+        Call sql = this;
         return Single.create(subscriber -> {
             Future.async(() -> {
                 try {
@@ -211,12 +172,32 @@ public class SQL {
         });
     }
 
-    public Observable<Row> asObservable(int pageOf, ExecutorService ec) {
-        return this.withPageOf(pageOf).asObservable(ec);
+    public Single<Row> asBlockingSingle() {
+        Call sql = this;
+        return Single.create(subscriber -> {
+            try {
+                Option<Row> row = sql.single();
+                if (row.isDefined()) {
+                    subscriber.onSuccess(row.get());
+                } else {
+                    subscriber.onError(new RuntimeException("No value returned"));
+                }
+            } catch (Throwable e) {
+                subscriber.onError(e);
+            }
+        });
     }
 
-    public Observable<Row> asObservable(ExecutorService ec) {
-        SQL sql = this;
+    public Observable<Row> asAsyncObservable(int pageOf, ExecutorService ec) {
+        return this.withPageOf(pageOf).asAsyncObservable(ec);
+    }
+
+    public Observable<Row> asBlockingObservable(int pageOf) {
+        return this.withPageOf(pageOf).asBlockingObservable();
+    }
+
+    public Observable<Row> asAsyncObservable(ExecutorService ec) {
+        Call sql = this;
         return Observable.create(new Observable.OnSubscribe<Row>() {
             @Override
             public void call(Subscriber<? super Row> subscriber) {
@@ -230,6 +211,23 @@ public class SQL {
                         subscriber.onError(e);
                     }
                 }, ec);
+            }
+        });
+    }
+
+    public Observable<Row> asBlockingObservable() {
+        Call sql = this;
+        return Observable.create(new Observable.OnSubscribe<Row>() {
+            @Override
+            public void call(Subscriber<? super Row> subscriber) {
+                subscriber.onStart();
+                try {
+                    sql.foreach(subscriber::onNext);
+                    subscriber.onCompleted();
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                    subscriber.onError(e);
+                }
             }
         });
     }
@@ -292,12 +290,12 @@ public class SQL {
         });
     }
 
-    public <R> Stream<R> map(final Function<Row, R> function) {
-        return new Stream<>(this, i -> Option.apply(function.apply(i)));
+    public <R> Observable<R> map(final Func1<Row, R> function) {
+        return this.asBlockingObservable().map(function);
     }
 
-    public Stream<Row> filter(final Predicate<Row> predicate) {
-        return new Stream<>(this, i -> predicate.test(i) ? Option.some(i) : Option.none());
+    public Observable<Row> filter(final Func1<Row, Boolean> predicate) {
+        return this.asBlockingObservable().filter(predicate);
     }
 
     public <B> B reduce(final B from, final BiFunction<B, Row, B> function) {
