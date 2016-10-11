@@ -216,22 +216,16 @@ public class SQL {
     }
 
     public Observable<Row> asObservable(ExecutorService ec) {
-        System.out.println("asObservable");
         SQL sql = this;
         return Observable.create(new Observable.OnSubscribe<Row>() {
             @Override
             public void call(Subscriber<? super Row> subscriber) {
-                System.out.println("call");
                 Future.async(() -> {
-                    System.out.println("start");
                     subscriber.onStart();
                     try {
                         sql.foreach(subscriber::onNext);
-                        System.out.println("finished");
                         subscriber.onCompleted();
-                        System.out.println("done");
                     } catch (Throwable e) {
-                        System.out.println("error");
                         e.printStackTrace();
                         subscriber.onError(e);
                     }
