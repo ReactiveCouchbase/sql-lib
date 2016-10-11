@@ -95,7 +95,7 @@ public class Batch {
     }
 
     public final List<Integer> batch() {
-        statement.set(API.fillPreparedStatement(statement.get(), preparedQuery.getParamNames(), params));
+        statement.set(API.fillStatement(statement.get(), preparedQuery.getParamNames(), params));
         try {
             statement.get().addBatch();
         } catch (Exception e) {
