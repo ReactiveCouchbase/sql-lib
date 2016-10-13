@@ -211,8 +211,45 @@ public class SQL {
         });
     }
 
+    public Single<Row> asSyncSingle() {
+        SQL sql = this;
+        return Single.create(subscriber -> {
+            try {
+                Option<Row> row = sql.single();
+                if (row.isDefined()) {
+                    subscriber.onSuccess(row.get());
+                } else {
+                    subscriber.onError(new RuntimeException("No value returned"));
+                }
+            } catch (Throwable e) {
+                subscriber.onError(e);
+            }
+        });
+    }
+
     public Observable<Row> asObservable(int pageOf, ExecutorService ec) {
         return this.withPageOf(pageOf).asObservable(ec);
+    }
+
+    public Observable<Row> asSyncObservable(int pageOf) {
+        return this.withPageOf(pageOf).asSyncObservable();
+    }
+
+    public Observable<Row> asSyncObservable() {
+        SQL sql = this;
+        return Observable.create(new Observable.OnSubscribe<Row>() {
+            @Override
+            public void call(Subscriber<? super Row> subscriber) {
+                subscriber.onStart();
+                try {
+                    sql.foreach(subscriber::onNext);
+                    subscriber.onCompleted();
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                    subscriber.onError(e);
+                }
+            }
+        });
     }
 
     public Observable<Row> asObservable(ExecutorService ec) {
@@ -283,7 +320,6 @@ public class SQL {
         });
         return map;
     }
-
 
     public final void foreach(final Consumer<Row> action) {
         collect(row -> {

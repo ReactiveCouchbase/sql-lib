@@ -62,14 +62,6 @@ public class AsyncStream<T> {
         return Future.async(() -> stream.reduce(from, function), ec);
     }
 
-    public Observable<T> runAsObservable(ExecutorService ec) {
-        throw new RuntimeException("fuuu");
-    }
-
-    public Single<T> runAsSingle(ExecutorService ec) {
-        throw new RuntimeException("fuuu");
-    }
-
     public Future<List<T>> run(ExecutorService ec) {
         return Future.async(stream::run, ec);
     }

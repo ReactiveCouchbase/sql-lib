@@ -181,7 +181,7 @@ public class Call {
         });
     }
 
-    public Single<CallRow> asBlockingSingle() {
+    public Single<CallRow> asSyncSingle() {
         Call sql = this;
         return Single.create(subscriber -> {
             try {
@@ -201,7 +201,7 @@ public class Call {
         return this.withPageOf(pageOf).asAsyncObservable(ec);
     }
 
-    public Observable<CallRow> asBlockingObservable(int pageOf) {
+    public Observable<CallRow> asSyncObservable(int pageOf) {
         return this.withPageOf(pageOf).asBlockingObservable();
     }
 
